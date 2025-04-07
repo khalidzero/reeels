@@ -11,8 +11,24 @@ function App() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!url.includes('facebook.com')) {
-      setError('Por favor, ingresa un enlace válido de Facebook Reels');
+    if (!url) {
+      setError('Por favor, ingresa un enlace de Facebook Reels');
+      return;
+    }
+
+    try {
+      const urlObj = new URL(url);
+      if (!urlObj.hostname.includes('facebook.com')) {
+        setError('El enlace debe ser de Facebook (facebook.com)');
+        return;
+      }
+
+      if (!url.includes('/reel/') && !url.includes('/reels/')) {
+        setError('El enlace debe ser de un Reel de Facebook. Ejemplo: https://www.facebook.com/reel/...');
+        return;
+      }
+    } catch (err) {
+      setError('Por favor, ingresa un enlace válido');
       return;
     }
 
@@ -31,9 +47,20 @@ function App() {
         body: JSON.stringify({ url }),
       });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        throw new Error('El servidor no respondió en el formato esperado');
+      }
 
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('No se pudo encontrar el video. Verifica que el Reel sea público y el enlace sea correcto');
+        } else if (response.status === 429) {
+          throw new Error('Demasiadas solicitudes. Por favor, espera un momento y vuelve a intentar');
+        }
         throw new Error(data.error || 'Error al procesar el video');
       }
 
@@ -46,10 +73,11 @@ function App() {
         setVideoTitle(data.title);
       }
     } catch (err) {
+      console.error('Error details:', err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Error al procesar el video. Por favor, verifica el enlace e intenta nuevamente.');
+        setError('Hubo un problema al procesar tu solicitud. Por favor, intenta nuevamente más tarde.');
       }
     } finally {
       setLoading(false);
